@@ -1,4 +1,7 @@
 ﻿using UsersAPI.DTOs;
+using UsersAPI.Exceptions;
+using UsersAPI.Helpers;
+using UsersAPI.Models;
 
 namespace UsersAPI.Services;
 
@@ -11,16 +14,25 @@ public class AuthService
         _userService = userService;
     }
 
-    public bool Login(LoginRequest request)
+    public async Task<User> LoginAsync(LoginRequest request)
     {
-        var user = _userService.GetByEmail(request.Email);
+        var user =
+            await _userService.GetByEmailAsync(
+                request.Email);
 
         if (user == null)
-            return false;
+            throw new UnauthorizedException(
+                "Invalid credentials.");
 
-        if (user.Password != request.Password)
-            return false;
+        var validPassword =
+            PasswordHasher.Verify(
+                request.Password,
+                user.Password);
 
-        return true;
+        if (!validPassword)
+            throw new UnauthorizedException(
+                "Invalid credentials.");
+
+        return user;
     }
 }
