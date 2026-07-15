@@ -149,6 +149,3 @@ http://localhost:5001/swagger
 
 ---
 
-## Author
-
-FIAP Tech Challenge – Phase 2
