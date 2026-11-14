@@ -39,6 +39,8 @@ jobs:
     needs: build-and-test
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push'
     runs-on: ubuntu-latest
+    env:
+      KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
     steps:
       - name: Checkout UsersApi
         uses: actions/checkout@v4
@@ -68,14 +70,14 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
 
       - name: Set Kubernetes Context
-        if: secrets.KUBE_CONFIG != ''
+        if: env.KUBE_CONFIG != ''
         uses: azure/k8s-set-context@v4
         with:
           method: kubeconfig
-          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+          kubeconfig: ${{ env.KUBE_CONFIG }}
 
       - name: Deploy to Kubernetes (Rolling Update)
-        if: secrets.KUBE_CONFIG != ''
+        if: env.KUBE_CONFIG != ''
         run: |
           kubectl set image deployment/users-api users-api=${{ env.IMAGE_NAME }}:${{ github.sha }} -n gamestore
           kubectl rollout status deployment/users-api -n gamestore
