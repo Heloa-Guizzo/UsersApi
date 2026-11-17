@@ -7,7 +7,7 @@ on:
     branches: [ main, master ]
 
 env:
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/users-api
+  ECR_REPOSITORY: users-api
 
 jobs:
   build-and-test:
@@ -41,9 +41,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
     steps:
       - name: Checkout UsersApi
         uses: actions/checkout@v4
@@ -56,6 +53,18 @@ jobs:
           repository: ${{ github.repository_owner }}/Shared
           path: Shared
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Build Docker Image (Local for Security Scan)
         uses: docker/build-push-action@v5
         with:
@@ -64,29 +73,23 @@ jobs:
           load: true
           push: false
           tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
       - name: Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.IMAGE_NAME }}:${{ github.sha }}'
+          image-ref: '${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}'
           format: 'table'
           exit-code: '0'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Push Docker Image
+      - name: Push Docker Image to Amazon ECR
         run: |
-          docker push ${{ env.IMAGE_NAME }}:latest
-          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
       - name: Set Kubernetes Context
         if: env.KUBE_CONFIG != ''
@@ -98,5 +101,5 @@ jobs:
       - name: Deploy to Kubernetes (Rolling Update)
         if: env.KUBE_CONFIG != ''
         run: |
-          kubectl set image deployment/users-api users-api=${{ env.IMAGE_NAME }}:${{ github.sha }} -n gamestore
+          kubectl set image deployment/users-api users-api=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} -n gamestore
           kubectl rollout status deployment/users-api -n gamestore
