@@ -28,4 +28,10 @@
     <ProjectReference Include="..\Shared\Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="UsersAPI.Tests\**" />
+    <EmbeddedResource Remove="UsersAPI.Tests\**" />
+    <None Remove="UsersAPI.Tests\**" />
+  </ItemGroup>
+
 </Project>
